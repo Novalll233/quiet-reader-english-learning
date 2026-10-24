@@ -39,6 +39,7 @@ import {readingModeForBridge} from './readingModeBridge';
 import {epubParagraphBridge} from './epubParagraphBridge';
 import {useSQLiteContext} from 'expo-sqlite';
 import {requestAssistance} from '../../services/ai/service';
+import {speechController} from '../speech/engine';
 
 function EpubReaderSession({ preparedSource,onToggleChrome,chapterRequest,onChapter,keysBlocked, book, onLeave, onLookupWord, onMarkSentence, onProgress, chromeVisible=true }: { preparedSource?:string;onToggleChrome:()=>void;chapterRequest:number;onChapter:(chapter:ChapterText)=>void;keysBlocked:boolean; book: Book; onProgress: (cfi: string, progress: number) => void; chromeVisible?: boolean; onLeave: () => void; onLookupWord: (word: string, context?: string, selection?: AIRequest) => void; onMarkSentence:(selection:AIRequest)=>void }) {
   const handledChapter=useRef(0);
@@ -69,6 +70,9 @@ function EpubReaderSession({ preparedSource,onToggleChrome,chapterRequest,onChap
   const [selectionActive,setSelectionActive]=useState(false);
   const [selectionTop,setSelectionTop]=useState(8);
   const [selectedSentence,setSelectedSentence]=useState<AIRequest|null>(null);
+  // The platform may clear the selection right after the long-press menu runs,
+  // so a speak started from that menu must survive its own selection teardown.
+  const speechGrace=useRef(0);
   const {marks,sentenceMarks,meaningsVisible,error:marksError,retry:retryMarks}=useMarks(book.id);
   const [ready,setReady]=useState(false);
   const [sentenceTranslation,setSentenceTranslation]=useState<{text:string;value:string}|null>(null);
@@ -127,11 +131,11 @@ function EpubReaderSession({ preparedSource,onToggleChrome,chapterRequest,onChap
   const removeSelection=useCallback(()=>controller.current?.removeSelection(),[]);
   const changeTheme=useCallback((value:Parameters<EpubPageController['changeTheme']>[0])=>controller.current?.changeTheme(value),[]);
   const leaving=useRef(false);
-  const leave=useCallback(()=>{if(leaving.current)return;leaving.current=true;injectJavascript('window.qrProgress?.capture(0);true;');setTimeout(()=>{if(leaving.current){leaving.current=false;onLeave();}},1800);},[injectJavascript,onLeave]);
+  const leave=useCallback(()=>{if(leaving.current)return;leaving.current=true;void speechController.stop();injectJavascript('window.qrProgress?.capture(0);true;');setTimeout(()=>{if(leaving.current){leaving.current=false;onLeave();}},1800);},[injectJavascript,onLeave]);
   useEffect(()=>{if(ready)injectJavascript(epubPageMotion);},[ready,settings.pageAnimation,injectJavascript]);
   useEffect(()=>{if(ready)injectJavascript(`window.qrPageAnimation=${settings.pageAnimation};true;`);},[ready,settings.pageAnimation,injectJavascript]);
   useEffect(()=>{if(ready)injectJavascript(`window.qrReader?.setReadingMode(${JSON.stringify(readingModeForBridge(settings.readingMode))});window.qrInteractionBlocked=${Boolean(keysBlocked||bookmarksOpen||aiSelection||showContents)};true;`);},[ready,settings.readingMode,keysBlocked,bookmarksOpen,aiSelection,showContents,injectJavascript]);
-  const turn=(direction:number)=>{if(!ready||selectionActive||bookmarksOpen||keysBlocked||aiSelection||showContents)return;injectJavascript('window.qrReader?.cancelPendingSelection();true;');void paper.turn(direction,()=>{if(direction>0)goNext({keepScrollOffset:true});else goPrevious({keepScrollOffset:true});});};
+  const turn=(direction:number)=>{if(!ready||selectionActive||bookmarksOpen||keysBlocked||aiSelection||showContents)return;void speechController.stop();injectJavascript('window.qrReader?.cancelPendingSelection();true;');void paper.turn(direction,()=>{if(direction>0)goNext({keepScrollOffset:true});else goPrevious({keepScrollOffset:true});});};
   const flow = settings.readingMode === 'scroll' ? 'scrolled-doc' : 'paginated';
   const previousFlow=useRef(flow);
   useEffect(()=>{
@@ -188,7 +192,8 @@ function EpubReaderSession({ preparedSource,onToggleChrome,chapterRequest,onChap
     label: '查词',
     action: (cfiRange: string) => readSelection(cfiRange, 'word'),
   }, {label: '翻译 / 解释', action: (cfiRange: string) => readSelection(cfiRange, 'translate')},
-  {label: '标记', action: (cfiRange: string) => readSelection(cfiRange, 'mark')}], [readSelection]);
+  {label: '标记', action: (cfiRange: string) => readSelection(cfiRange, 'mark')},
+  {label: '朗读', action: (cfiRange: string) => readSelection(cfiRange, 'speak')}], [readSelection]);
 
   const initialTheme = useRef(theme);
   const appliedTheme = useRef(theme);
@@ -241,7 +246,7 @@ function EpubReaderSession({ preparedSource,onToggleChrome,chapterRequest,onChap
         enableSelection
         menuItems={selectionMenu}
         injectedJavascript={paintScript+epubVisualPosition+epubPreviewBoot(document.direction,document.revision??0,document.visualAnchor)+`window.qrInteractionBlocked=false;window.qrSelectionGuard&&(window.qrSelectionGuard.locked=false);window.qrReadingMode=${JSON.stringify(readingModeForBridge(settings.readingMode))};`+epubProgressBridge+readingBridgeScript+`if(!window.qrContentHook){window.qrContentHook=true;rendition.hooks.content.register(function(content){window.qrReader.attach(content.document,'epub:'+content.sectionIndex);});}rendition.getContents().forEach(function(content){window.qrReader.attach(content.document,'epub:'+content.sectionIndex);});true;`+epubParagraphBridge+`window.qrEpubParagraphs?.sync(${JSON.stringify(paragraphStates.current)});window.qrEpubParagraphs?.setVisible(${settings.paragraphTranslation});true;`+restoreEpubPosition(document.anchor,document.visualAnchor,settings.readingMode==='scroll'?'scroll':'paginated')}
-        onStarted={()=>{traceReading('started',{bookId:book.id,cfi:lastLocation.current??undefined,mode:settings.readingMode,code:'EPUB_SINGLE_VIEW_A'});restored.current=false;setReady(false);setSelectionActive(false);setSelectedSentence(null);appliedTheme.current=initialTheme.current;}}
+        onStarted={()=>{traceReading('started',{bookId:book.id,cfi:lastLocation.current??undefined,mode:settings.readingMode,code:'EPUB_SINGLE_VIEW_A'});restored.current=false;setReady(false);setSelectionActive(false);setSelectedSentence(null);void speechController.stop();appliedTheme.current=initialTheme.current;}}
         onRendered={()=>{controllers.current.get(document.id)?.injectJavascript('window.qrDecoratePage?.();true;');}}
         onWebViewMessage={(event: unknown) => {
           const data = event as AIRequest & {type?: string; location?: Location; code?: string;revision?:number;sequence?:number};
@@ -297,7 +302,7 @@ function EpubReaderSession({ preparedSource,onToggleChrome,chapterRequest,onChap
             paper.settle((data as any).moved!==false);return;
           }
           if (data?.type === 'qr-toggle-ui') {onToggleChrome();return;}
-          if (data?.type === 'qr-selection-state') {const active=Boolean((data as unknown as {active:boolean}).active);setSelectionActive(active);if(!active)setSelectedSentence(null);return;}
+          if (data?.type === 'qr-selection-state') {const active=Boolean((data as unknown as {active:boolean}).active);setSelectionActive(active);if(!active){setSelectedSentence(null);if(Date.now()>=speechGrace.current)void speechController.stop();}return;}
           if (data?.type === 'qr-selection-ready') {setSelectionTop((data as any).toolbarTop??8);setSelectedSentence(data);return;}
           if (data?.type === 'qr-turn-error') { setFailure('翻页失败，阅读位置已保留。请返回书架重试。'); return; }
           if (data?.type === 'qr-position-error') { traceReading('restore-error',{bookId:book.id,code:data.code});restored.current=false;setReady(false);setFailure('暂时无法确认上次位置。原进度未覆盖。\n诊断：'+(/^RESTORE_[A-Z]+$/.test(data.code??'')?data.code:'RESTORE_UNKNOWN')); return; }
@@ -307,6 +312,7 @@ function EpubReaderSession({ preparedSource,onToggleChrome,chapterRequest,onChap
             const word = extractSingleLookupWord(data.targetText);
             if (word) onLookupWord(word, data.previousContext + data.targetText + data.followingContext, data);
           } else if (data.mode === 'translate') {removeSelection();setAISelection(data);}
+          else if ((data.mode as string) === 'speak') {speechGrace.current=Date.now()+900;void speechController.speak(data.targetText);}
         }}
         onLocationsReady={(_key,locations)=>{injectAll(`book.locations.load(${JSON.stringify(locations)});true;`);controllers.current.get(document.id)?.injectJavascript(`var loc=rendition.currentLocation();window.ReactNativeWebView.postMessage(JSON.stringify({type:'qr-exact-progress',location:loc,fraction:book.locations.percentageFromCfi(loc.start.cfi)}));true;`);}}
         charactersPerLocation={2400}

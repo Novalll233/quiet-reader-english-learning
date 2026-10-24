@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "com.quietreader.personal",
-      "versionCode": 66,
+      "versionCode": 67,
       "adaptiveIcon": {
         "backgroundColor": "#FFF0BA",
         "foregroundImage": "./assets/android-icon-foreground.png",

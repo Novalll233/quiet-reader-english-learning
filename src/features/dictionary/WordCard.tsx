@@ -1,8 +1,9 @@
-import {X,Volume2,BookmarkPlus,Check,ChevronDown} from 'lucide-react-native';
+import {X,BookmarkPlus,Check,ChevronDown} from 'lucide-react-native';
 import {IconButton} from '../../components/IconButton';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, ScrollView, Text, View } from 'react-native';
-import * as Speech from 'expo-speech';
+import {SpeechButton} from '../speech/SpeechButton';
+import {speechRateFor} from '../speech/speechText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Button, styles } from '../../components/ui';
@@ -59,7 +60,7 @@ export function WordCard({ word, sourceBookId, sourceText, selection, onClose }:
           {result.entry.translation ? <Text numberOfLines={details?undefined:3} style={{ color: colors.text, fontSize: 18, lineHeight: 27 }}>{result.entry.translation}</Text> : null}
           {result.entry.definition ? <Text numberOfLines={details?undefined:2} style={{ color: colors.muted, fontSize: 14, lineHeight: 22 }}>{result.entry.definition}</Text> : null}
           <View style={[styles.row, { marginTop: 4 }]}>
-            <IconButton icon={Volume2} label="发音" onPress={() => Speech.speak(result.entry.word, { language: 'en-US', rate: 0.85 })} />
+            <SpeechButton text={result.entry.word} rate={speechRateFor('word')} label="发音"/>
             <IconButton icon={saved?Check:BookmarkPlus} label={saved ? '已收藏' : '加入生词'} disabled={saved} onPress={() => {
               void saveVocabulary(db, result, sourceBookId, selection ? sentenceFromSelection(selection) : extractSourceSentence(sourceText, word ?? result.query))
                 .then(() => setSaved(true))
