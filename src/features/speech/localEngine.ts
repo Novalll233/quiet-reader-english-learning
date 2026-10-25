@@ -2,9 +2,9 @@ import { LOCAL_CHUNK_LIMIT, buildLocalRequest, localConfigProblem, localEndpoint
 import { createRemoteEngine } from './remoteEngine';
 import { getSpeechConfig } from './speechConfig';
 
-// The first request also loads the model into VRAM, which the plugin's own
-// notes put at 20-40 seconds.
-const TIMEOUT_MS = 90000;
+// The first request also loads the models into VRAM and warms CUDA; measured at
+// over 100 seconds on a 4 GB laptop GPU, with ~2.5 seconds per later sentence.
+const TIMEOUT_MS = 180000;
 
 async function synthesizeLocal(text: string, options: { language: string }) {
   const config = getSpeechConfig();
