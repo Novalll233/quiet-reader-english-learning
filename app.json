@@ -32,7 +32,15 @@
       "expo-router",
       "expo-sqlite",
       "expo-secure-store",
-      "./plugins/withReaderKeys.cjs"
+      "./plugins/withReaderKeys.cjs",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ]
   }
 }

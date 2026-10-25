@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import type { ReaderSettings } from '../../types';
+import { loadAzureKey, setSpeechConfig, speechConfigFromSettings } from '../speech/speechConfig';
 import { defaults, palettes, parseSettings } from './model';
 
 const Context = createContext({ settings: defaults, colors: palettes.paper, update: (_value: Partial<ReaderSettings>) => {}, error: '' });
@@ -17,8 +18,12 @@ export function SettingsProvider({ children }: PropsWithChildren) {
       if (active) { current.current = parseSettings(row?.value); setSettings(current.current); }
     }).catch(() => { if (active) setError('阅读设置读取失败，暂时使用默认排版。'); })
       .finally(() => { if (active) setReady(true); });
+    // The speech engines live outside React, so the Azure key is loaded once.
+    void loadAzureKey();
     return () => { active = false; };
   }, [db]);
+  // Mirror speech settings into the module the engines read at speak time.
+  useEffect(() => { setSpeechConfig(speechConfigFromSettings(settings)); }, [settings]);
   function update(value: Partial<ReaderSettings>) {
     const next = parseSettings(JSON.stringify({ ...current.current, ...value }));
     current.current = next;

@@ -28,7 +28,7 @@ export function edgeVoiceFor(language: string) {
   return language.toLowerCase().startsWith('zh') ? EDGE_VOICES.zh : EDGE_VOICES.en;
 }
 
-const escapeXml = (value: string) => value
+export const escapeXml = (value: string) => value
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 

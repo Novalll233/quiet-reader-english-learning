@@ -1,9 +1,11 @@
 import { cleanSpeechText, speechLanguageFor, splitSpeechChunks, DEFAULT_SPEECH_LIMIT, DEFAULT_SPEECH_RATE } from './speechText';
 
-/** The native engine is injected so the queue logic stays testable offline. */
+/** The native engine is injected so the queue logic stays testable offline.
+ * A `chunkLimit` lets an engine cap how much text one request may carry. */
 export type SpeechEngine = {
   speak: (text: string, options: { language: string; rate: number; onDone: () => void; onStopped: () => void; onError: (error: Error) => void }) => void;
   stop: () => Promise<void>;
+  chunkLimit?: () => number;
 };
 export type SpeechState = { speaking: boolean; text: string };
 
@@ -49,7 +51,9 @@ export function createSpeechController(engine: SpeechEngine, options: { limit?: 
   }
   async function speak(text: string, overrides: { rate?: number } = {}) {
     const cleaned = cleanSpeechText(text);
-    const parts = splitSpeechChunks(cleaned, limit);
+    // An engine may need much shorter segments than the device limit allows.
+    const preferred = engine.chunkLimit?.() ?? 0;
+    const parts = splitSpeechChunks(cleaned, preferred > 0 ? preferred : limit);
     const token = generation + 1;
     generation = token;
     chunks = parts;
@@ -86,5 +90,28 @@ export function createFallbackEngine(primary: SpeechEngine, secondary: SpeechEng
       await primary.stop().catch(() => undefined);
       await secondary.stop().catch(() => undefined);
     },
+  };
+}
+
+/** Walks a preference order and keeps the first engine that can speak. The
+ * order is resolved per utterance so a settings change applies immediately. */
+export function createChainEngine(resolve: () => SpeechEngine[], onEngineUsed?: (index: number) => void): SpeechEngine {
+  return {
+    speak: (text, options) => {
+      const engines = resolve();
+      const attempt = (index: number) => {
+        if (index >= engines.length) { options.onError(new Error('没有可用的朗读引擎')); return; }
+        engines[index].speak(text, {
+          ...options,
+          onDone: () => { onEngineUsed?.(index); options.onDone(); },
+          onError: () => attempt(index + 1),
+        });
+      };
+      attempt(0);
+    },
+    stop: async () => {
+      await Promise.all(resolve().map(engine => engine.stop().catch(() => undefined)));
+    },
+    chunkLimit: () => resolve()[0]?.chunkLimit?.() ?? 0,
   };
 }
