@@ -36,10 +36,20 @@ test('a missing reference audio is reported before the request', () => {
 });
 
 test('the local request matches the api_v2 payload and stays short', () => {
-  assert.deepEqual(
-    buildLocalRequest('你好', 'zh-CN', { refAudioPath: ' D:\\ref.wav ', promptText: '参考', promptLang: 'zh' }),
-    { text: '你好', text_lang: 'zh', ref_audio_path: 'D:\\ref.wav', prompt_text: '参考', prompt_lang: 'zh', media_type: 'wav', streaming_mode: false },
-  );
+  const body = buildLocalRequest('你好', 'zh-CN', { refAudioPath: ' D:\\ref.wav ', promptText: '参考', promptLang: 'zh' });
+  assert.equal(body.text_lang, 'zh');
+  assert.equal(body.ref_audio_path, 'D:\\ref.wav');
+  assert.equal(body.prompt_text, '参考');
+  assert.equal(body.media_type, 'wav');
+  assert.equal(body.streaming_mode, false);
+  assert.equal(body.speed_factor, 1);
+  // The tuned sampling values are what stop the server dropping words.
+  assert.equal(body.repetition_penalty, 1.35);
+  assert.equal(body.temperature, 0.7);
+  assert.equal(body.top_k, 10);
+  assert.equal(body.text_split_method, 'cut2');
+  assert.equal(body.fragment_interval, 0.4);
+  assert.equal(buildLocalRequest('hi', 'en-US', { refAudioPath: 'r', promptText: '', promptLang: 'zh' }, 0.9).speed_factor, 0.9);
   assert.equal(LOCAL_CHUNK_LIMIT, 90);
   assert.ok(AZURE_CHUNK_LIMIT > LOCAL_CHUNK_LIMIT);
 });

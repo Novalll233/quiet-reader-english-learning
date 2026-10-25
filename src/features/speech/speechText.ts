@@ -6,6 +6,8 @@ const SPACE_RUN = /[\s\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]+/g;
 const CJK = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/;
 const LATIN = /[A-Za-z]/;
 const SENTENCE = /[^.!?…]+[.!?…]*\s*/g;
+/** Where a neural voice may pause: stopping elsewhere swallows the last word. */
+const CLAUSE = /[,;:、，；：)）】」』—–]/;
 
 /** Android rejects an utterance above its own limit, so stay well under it. */
 export const DEFAULT_SPEECH_LIMIT = 3200;
@@ -31,13 +33,26 @@ function hardSplit(piece: string, limit: number) {
   const parts: string[] = [];
   let rest = piece.trim();
   while (rest.length > limit) {
-    // Cut on a space when one exists so a chunk never starts mid-word.
-    let cut = rest.lastIndexOf(' ', limit);
+    // Ending a chunk at punctuation reads as a natural pause. A cut in the
+    // middle of a clause makes the voice trail off and drop the last word, so
+    // look back for punctuation first and only then fall back to a space.
+    let cut = -1;
+    for (let index = Math.min(limit, rest.length - 1); index > limit * 0.4; index -= 1) {
+      if (CLAUSE.test(rest[index])) { cut = index + 1; break; }
+    }
+    if (cut <= 0) cut = rest.lastIndexOf(' ', limit);
     if (cut <= 0) cut = limit;
     parts.push(rest.slice(0, cut).trim());
     rest = rest.slice(cut).trim();
   }
-  if (rest) parts.push(rest);
+  // A two-word tail reads as a hiccup on its own; keep it with its clause.
+  if (!rest) return parts;
+  const last = parts[parts.length - 1];
+  if (last && rest.length < 12 && last.length + rest.length <= Math.round(limit * 1.15)) {
+    parts[parts.length - 1] = `${last} ${rest}`;
+    return parts;
+  }
+  parts.push(rest);
   return parts;
 }
 
@@ -65,5 +80,13 @@ export function splitSpeechChunks(text: string, limit = DEFAULT_SPEECH_LIMIT) {
     current += piece;
   }
   push();
-  return chunks;
+  // "Mr." ends with a period but not a sentence, so its tail must stay with
+  // the clause: a stray "Dawes." would be read as a hiccup of its own.
+  const merged: string[] = [];
+  for (const chunk of chunks) {
+    const previous = merged[merged.length - 1];
+    if (previous && chunk.length < 12 && previous.length + chunk.length <= safeLimit) merged[merged.length - 1] = `${previous} ${chunk}`;
+    else merged.push(chunk);
+  }
+  return merged;
 }

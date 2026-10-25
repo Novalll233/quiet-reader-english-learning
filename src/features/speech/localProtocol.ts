@@ -15,7 +15,7 @@ export function localTextLangFor(language: string) {
 
 export type LocalSpeechConfig = { refAudioPath: string; promptText: string; promptLang: string };
 
-export function buildLocalRequest(text: string, language: string, config: LocalSpeechConfig) {
+export function buildLocalRequest(text: string, language: string, config: LocalSpeechConfig, rate = 1) {
   return {
     text,
     text_lang: localTextLangFor(language),
@@ -24,6 +24,17 @@ export function buildLocalRequest(text: string, language: string, config: LocalS
     prompt_lang: config.promptLang.trim() || 'zh',
     media_type: 'wav',
     streaming_mode: false,
+    speed_factor: rate,
+    // Sampling defaults copied from the plugin's own client: its "stop losing
+    // sentences" fix relies on them, and the server defaults drop words.
+    text_split_method: 'cut2',
+    batch_size: 1,
+    parallel_infer: false,
+    repetition_penalty: 1.35,
+    temperature: 0.7,
+    top_k: 10,
+    top_p: 0.9,
+    fragment_interval: 0.4,
   };
 }
 

@@ -6,7 +6,7 @@ import { getSpeechConfig } from './speechConfig';
 // over 100 seconds on a 4 GB laptop GPU, with ~2.5 seconds per later sentence.
 const TIMEOUT_MS = 180000;
 
-async function synthesizeLocal(text: string, options: { language: string }) {
+async function synthesizeLocal(text: string, options: { language: string; rate?: number }) {
   const config = getSpeechConfig();
   const local = { refAudioPath: config.localRef, promptText: config.localPrompt, promptLang: config.localPromptLang };
   const problem = localConfigProblem(local);
@@ -18,7 +18,7 @@ async function synthesizeLocal(text: string, options: { language: string }) {
       method: 'POST',
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildLocalRequest(text, options.language, local)),
+      body: JSON.stringify(buildLocalRequest(text, options.language, local, options.rate ?? 1)),
     });
     if (!response.ok) throw new Error(`本地服务返回 HTTP ${response.status}，请确认 api_v2.py 正在运行并监听 0.0.0.0`);
     const audio = new Uint8Array(await response.arrayBuffer());
