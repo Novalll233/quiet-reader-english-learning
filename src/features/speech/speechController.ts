@@ -76,3 +76,15 @@ export function createSpeechController(engine: SpeechEngine, options: { limit?: 
   };
 }
 export type SpeechController = ReturnType<typeof createSpeechController>;
+
+/** Prefers a natural online voice, but keeps reading with the system voice
+ * when the network, the endpoint or the device blocks the first choice. */
+export function createFallbackEngine(primary: SpeechEngine, secondary: SpeechEngine): SpeechEngine {
+  return {
+    speak: (text, options) => primary.speak(text, { ...options, onError: () => secondary.speak(text, options) }),
+    stop: async () => {
+      await primary.stop().catch(() => undefined);
+      await secondary.stop().catch(() => undefined);
+    },
+  };
+}

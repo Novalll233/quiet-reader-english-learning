@@ -5,6 +5,7 @@
   "dependencies": {
     "@epubjs-react-native/core": "^1.4.7",
     "expo": "~57.0.20",
+    "expo-audio": "~57.0.4",
     "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.17",
     "expo-crypto": "~57.0.2",
@@ -51,5 +52,8 @@
     "check:ios": "expo export --platform ios",
     "postinstall": "node scripts/apply-native-link-fix.js"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "expo-asset": "~57.0.16"
+  }
 }
